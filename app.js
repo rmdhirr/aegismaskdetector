@@ -7,22 +7,20 @@ const statusPanel = document.getElementById('status-panel');
 
 let session;
 const TARGET_SIZE = 640;
-
-// Set overlay canvas dimensions to match the CSS dimensions
-overlay.width = 640;
-overlay.height = 480;
+const CONFIDENCE_THRESHOLD = 0.45;
+const IOU_THRESHOLD = 0.4;
 
 /**
- * Initialize the ONNX Runtime Session
+ * Initialize the ONNX Runtime WASM Session
  */
 async function loadModel() {
     try {
-        // Specify WASM execution provider for browser environments
+        ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
         session = await ort.InferenceSession.create('./best.onnx', { executionProviders: ['wasm'] });
         statusPanel.innerText = "STANDBY: AWAITING CAMERA INITIALIZATION";
         startCamera();
     } catch (e) {
-        console.error(e);
+        console.error("Model Mount Failure:", e);
         statusPanel.innerText = "SYSTEM FAILURE: UNABLE TO MOUNT MODEL";
         statusPanel.style.borderColor = "#ff0000";
         statusPanel.style.color = "#ff0000";
@@ -30,12 +28,12 @@ async function loadModel() {
 }
 
 /**
- * Request and bind the webcam stream
+ * Bind the hardware stream to the video element
  */
 async function startCamera() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
-            video: { width: 640, height: 480, facingMode: 'user' },
+            video: { width: 640, height: 480, facingMode: 'environment' },
             audio: false
         });
         video.srcObject = stream;
@@ -44,13 +42,13 @@ async function startCamera() {
             requestAnimationFrame(processFrame);
         };
     } catch (e) {
-        console.error(e);
+        console.error("Camera Access Failure:", e);
         statusPanel.innerText = "SYSTEM FAILURE: CAMERA ACCESS DENIED";
     }
 }
 
 /**
- * Standard Intersection over Union (IoU) calculation for NMS
+ * Intersection over Union (IoU) Calculation
  */
 function calculateIoU(box1, box2) {
     const xA = Math.max(box1.x, box2.x);
@@ -66,7 +64,7 @@ function calculateIoU(box1, box2) {
 }
 
 /**
- * Non-Maximum Suppression to filter overlapping predictions
+ * Non-Maximum Suppression (NMS)
  */
 function nonMaxSuppression(boxes, iouThreshold) {
     boxes.sort((a, b) => b.score - a.score);
@@ -80,19 +78,17 @@ function nonMaxSuppression(boxes, iouThreshold) {
 }
 
 /**
- * Main execution loop per frame
+ * Main Inference and Rendering Loop
  */
 async function processFrame() {
     if (!session) return;
 
-    // Draw the current video frame onto the 640x640 hidden processor canvas
+    // 1. Frame Extraction & Scaling
     ctxProcessor.drawImage(video, 0, 0, TARGET_SIZE, TARGET_SIZE);
     const imageData = ctxProcessor.getImageData(0, 0, TARGET_SIZE, TARGET_SIZE).data;
 
-    // Allocate memory for the Float32 tensor
+    // 2. Tensor Memory Allocation [1, 3, 640, 640] Float32
     const float32Data = new Float32Array(3 * TARGET_SIZE * TARGET_SIZE);
-
-    // Convert RGBA interleaved array to planar NCHW format [1, 3, 640, 640] and normalize to [0, 1]
     for (let i = 0; i < TARGET_SIZE * TARGET_SIZE; i++) {
         float32Data[i]                                   = imageData[i * 4] / 255.0;     // R
         float32Data[i + TARGET_SIZE * TARGET_SIZE]       = imageData[i * 4 + 1] / 255.0; // G
@@ -100,28 +96,27 @@ async function processFrame() {
     }
 
     const inputTensor = new ort.Tensor('float32', float32Data, [1, 3, TARGET_SIZE, TARGET_SIZE]);
-    const feeds = {};
-    feeds[session.inputNames[0]] = inputTensor;
-
-    // Execute Inference
-    const results = await session.run(feeds);
+    
+    // 3. Execution
+    const results = await session.run({ [session.inputNames[0]]: inputTensor });
     const output = results[session.outputNames[0]].data; 
     
-    // Parse the [1, 6, 8400] output tensor
     let rawBoxes = [];
     const elements = 8400;
 
+    // 4. Output Parsing (1, 6, 8400 shape)
     for (let i = 0; i < elements; i++) {
         const x = output[i];
         const y = output[i + elements];
         const w = output[i + 2 * elements];
         const h = output[i + 3 * elements];
-        const scoreMask = output[i + 4 * elements];
+        
+        const scoreMask = output[i + 4 * elements]; 
         const scoreNoMask = output[i + 5 * elements];
 
         const maxScore = Math.max(scoreMask, scoreNoMask);
 
-        if (maxScore > 0.5) {
+        if (maxScore > CONFIDENCE_THRESHOLD) {
             const classId = scoreNoMask > scoreMask ? 1 : 0;
             rawBoxes.push({
                 x: x - w / 2,
@@ -134,15 +129,16 @@ async function processFrame() {
         }
     }
 
-    const finalBoxes = nonMaxSuppression(rawBoxes, 0.4);
+    // 5. Post-Processing
+    const finalBoxes = nonMaxSuppression(rawBoxes, IOU_THRESHOLD);
 
-    // Render operations
+    // 6. UI Rendering Phase
     ctxOverlay.clearRect(0, 0, overlay.width, overlay.height);
     let isViolating = false;
 
     if (finalBoxes.length > 0) {
         finalBoxes.forEach(box => {
-            // Scale coordinates from the 640x640 tensor model back to the 640x480 UI rendering resolution
+            // Un-squish coordinates from 640x640 model input back to 640x480 UI rendering resolution
             const scaleX = overlay.width / TARGET_SIZE;
             const scaleY = overlay.height / TARGET_SIZE;
             
@@ -151,36 +147,39 @@ async function processFrame() {
             const scaledW = box.w * scaleX;
             const scaledH = box.h * scaleY;
 
-            if (box.classId === 1) {
-                isViolating = true;
-                ctxOverlay.strokeStyle = '#ff0000';
-                ctxOverlay.fillStyle = '#ff0000';
-            } else {
-                ctxOverlay.strokeStyle = '#00ff00';
-                ctxOverlay.fillStyle = '#00ff00';
-            }
+            // Define UI Parameters
+            const isNoMask = box.classId === 1;
+            if (isNoMask) isViolating = true;
+            
+            const color = isNoMask ? '#FF3B30' : '#34C759'; 
+            const labelText = isNoMask ? `NO MASK ${(box.score * 100).toFixed(1)}%` : `MASK ${(box.score * 100).toFixed(1)}%`;
 
-            ctxOverlay.lineWidth = 3;
+            // Draw Checkpoint Bounding Box
+            ctxOverlay.strokeStyle = color;
+            ctxOverlay.lineWidth = 4;
             ctxOverlay.strokeRect(scaledX, scaledY, scaledW, scaledH);
             
-            const label = box.classId === 1 ? `VIOLATION [${box.score.toFixed(2)}]` : `COMPLIANT [${box.score.toFixed(2)}]`;
-            ctxOverlay.fillRect(scaledX, scaledY - 25, label.length * 10, 25);
+            // Render Dynamic Background Block for Text Readability
+            ctxOverlay.font = 'bold 18px monospace';
+            const textWidth = ctxOverlay.measureText(labelText).width;
+            ctxOverlay.fillStyle = color;
+            ctxOverlay.fillRect(scaledX - 2, scaledY - 28, textWidth + 12, 28);
             
-            ctxOverlay.fillStyle = '#ffffff';
-            ctxOverlay.font = '16px monospace';
-            ctxOverlay.fillText(label, scaledX + 5, scaledY - 8);
+            // Render Text Overlay
+            ctxOverlay.fillStyle = '#FFFFFF';
+            ctxOverlay.fillText(labelText, scaledX + 4, scaledY - 8);
         });
 
-        // Global Checkpoint Protocol Logic
+        // Evaluate Global Sterile Access Protocol
         if (isViolating) {
-            statusPanel.innerText = "🚨 ACCESS DENIED: STERILE PROTOCOL VIOLATED";
+            statusPanel.innerText = "🚨 ACCESS DENIED: PROTOCOL VIOLATED";
             statusPanel.style.backgroundColor = "#4a0000";
-            statusPanel.style.borderColor = "#ff0000";
+            statusPanel.style.borderColor = "#FF3B30";
             statusPanel.style.color = "#ffcccc";
         } else {
             statusPanel.innerText = "✅ ACCESS GRANTED: PROCEED TO AIRLOCK";
             statusPanel.style.backgroundColor = "#003300";
-            statusPanel.style.borderColor = "#00ff00";
+            statusPanel.style.borderColor = "#34C759";
             statusPanel.style.color = "#ccffcc";
         }
     } else {
@@ -190,9 +189,9 @@ async function processFrame() {
         statusPanel.style.color = "#ffffff";
     }
 
-    // Loop
+    // Await next browser repaint
     requestAnimationFrame(processFrame);
 }
 
-// Initiate initialization sequence
+// Bootstrap
 window.onload = loadModel;
