@@ -28,15 +28,24 @@ async function loadModel() {
 }
 
 /**
- * Bind the hardware stream to the video element
+ * Bind the hardware stream to the video element (Optimized for both Laptops and Mobile)
  */
 async function startCamera() {
     try {
+        // Relaxed constraints to ensure compatibility with standard laptop webcams
         const stream = await navigator.mediaDevices.getUserMedia({
-            video: { width: 640, height: 480, facingMode: 'environment' },
+            video: { 
+                width: { ideal: 640 }, 
+                height: { ideal: 480 } 
+            },
             audio: false
         });
+        
         video.srcObject = stream;
+        
+        // Explicitly command the video to play to circumvent browser autoplay blocking
+        await video.play();
+
         video.onloadedmetadata = () => {
             statusPanel.innerText = "AWAITING SUBJECT...";
             requestAnimationFrame(processFrame);
@@ -44,6 +53,8 @@ async function startCamera() {
     } catch (e) {
         console.error("Camera Access Failure:", e);
         statusPanel.innerText = "SYSTEM FAILURE: CAMERA ACCESS DENIED";
+        statusPanel.style.borderColor = "#ff0000";
+        statusPanel.style.color = "#ff0000";
     }
 }
 
