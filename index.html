@@ -39,7 +39,7 @@
 
         /* --- PERFECT ALIGNMENT CONTAINER --- */
         .container {
-            position: relative; /* Anchor for absolute children */
+            position: relative;
             width: 640px;
             height: 480px;
         }
@@ -52,17 +52,17 @@
             height: 480px;
             border: 2px solid #555;
             border-radius: 8px;
-            object-fit: fill; /* Prevents aspect ratio cropping that breaks alignment */
+            object-fit: fill; 
         }
 
         canvas#overlay {
             position: absolute;
             top: 0;
             left: 0;
-            width: 640px; /* Must strictly match video CSS width */
-            height: 480px; /* Must strictly match video CSS height */
-            pointer-events: none; /* Allows right-clicking the video if needed */
-            z-index: 10;
+            width: 640px; 
+            height: 480px; 
+            pointer-events: none; 
+            z-index: 9999; /* Forces the canvas to the absolute front */
         }
     </style>
 </head>
@@ -75,7 +75,6 @@
 
     <div class="container">
         <video id="webcam" autoplay playsinline muted></video>
-        <!-- Internal coordinate resolution matches CSS resolution -->
         <canvas id="overlay" width="640" height="480"></canvas>
     </div>
 
