@@ -41,12 +41,15 @@ async function startCamera() {
         });
         
         video.srcObject = stream;
+        
+        // Wait for the video to successfully start playing
         await video.play();
 
-        video.onloadedmetadata = () => {
-            statusPanel.innerText = "AWAITING SUBJECT...";
-            requestAnimationFrame(processFrame);
-        };
+        // Since the video is actively playing, the metadata is definitely loaded.
+        // Let's kickstart the AI engine immediately!
+        statusPanel.innerText = "AWAITING SUBJECT...";
+        requestAnimationFrame(processFrame);
+        
     } catch (e) {
         console.error("Camera Access Failure:", e);
         statusPanel.innerText = "SYSTEM FAILURE: CAMERA ACCESS DENIED";
