@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AegisMask: Edge Checkpoint</title>
+    <!-- Import ONNX Runtime Web -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+    <style>
+        body {
+            background-color: #121212;
+            color: #ffffff;
+            font-family: monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            position: relative;
+            margin-top: 20px;
+        }
+        video {
+            border: 2px solid #555;
+            border-radius: 8px;
+            width: 640px;
+            height: 480px;
+            object-fit: cover;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 640px;
+            height: 480px;
+            pointer-events: none;
+        }
+        .status-panel {
+            margin-top: 20px;
+            padding: 15px 30px;
+            border-radius: 5px;
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            border: 2px solid #555;
+            width: 580px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🛡️ AEGIS MASK: Edge Checkpoint</h1>
+    <p>Inference executing locally via WebAssembly.</p>
+
+    <div class="status-panel" id="status-panel">INITIALIZING PROTOCOL...</div>
+
+    <div class="container">
+        <!-- The live camera feed -->
+        <video id="webcam" autoplay playsinline muted></video>
+        <!-- The overlay for drawing bounding boxes -->
+        <canvas id="overlay"></canvas>
+    </div>
+
+    <!-- Hidden canvas used strictly for resizing frames to the model's expected 640x640 input -->
+    <canvas id="processor" width="640" height="640" style="display:none;"></canvas>
+
+    <script src="app.js"></script>
+</body>
+</html>
