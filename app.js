@@ -28,11 +28,10 @@ async function loadModel() {
 }
 
 /**
- * Bind the hardware stream to the video element (Optimized for both Laptops and Mobile)
+ * Bind the hardware stream to the video element
  */
 async function startCamera() {
     try {
-        // Relaxed constraints to ensure compatibility with standard laptop webcams
         const stream = await navigator.mediaDevices.getUserMedia({
             video: { 
                 width: { ideal: 640 }, 
@@ -42,8 +41,6 @@ async function startCamera() {
         });
         
         video.srcObject = stream;
-        
-        // Explicitly command the video to play to circumvent browser autoplay blocking
         await video.play();
 
         video.onloadedmetadata = () => {
@@ -117,10 +114,10 @@ async function processFrame() {
 
     // 4. Output Parsing (1, 6, 8400 shape)
     for (let i = 0; i < elements; i++) {
-        const x = output[i];
-        const y = output[i + elements];
-        const w = output[i + 2 * elements];
-        const h = output[i + 3 * elements];
+        let x = output[i];
+        let y = output[i + elements];
+        let w = output[i + 2 * elements];
+        let h = output[i + 3 * elements];
         
         const scoreMask = output[i + 4 * elements]; 
         const scoreNoMask = output[i + 5 * elements];
@@ -128,6 +125,15 @@ async function processFrame() {
         const maxScore = Math.max(scoreMask, scoreNoMask);
 
         if (maxScore > CONFIDENCE_THRESHOLD) {
+            
+            // Auto-Detect Normalized Coordinates and convert to pixel scale
+            if (w <= 1.5 && h <= 1.5) {
+                x *= TARGET_SIZE;
+                y *= TARGET_SIZE;
+                w *= TARGET_SIZE;
+                h *= TARGET_SIZE;
+            }
+
             const classId = scoreNoMask > scoreMask ? 1 : 0;
             rawBoxes.push({
                 x: x - w / 2,
