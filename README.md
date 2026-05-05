@@ -74,7 +74,7 @@ Because this application relies exclusively on static assets (HTML, JS, ONNX), i
 
 ### 👩‍💻 Author
 **Ramadhirra Azzahra Putri**  
-*Mechatronics & AI Engineer | Specializing in NLP**
+*Mechatronics & AI Engineer | Specializing in NLP*
 
 ---
 *Built with ❤️ and excessive amounts of tea in Kuningan, West Java.*
