@@ -35,12 +35,24 @@ initBtn.addEventListener('click', async () => {
 });
 
 /**
- * Initialize the ONNX Runtime WASM Session
+ * Initialize the ONNX Runtime Session (High Performance)
  */
 async function loadModel() {
     try {
         ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
-        session = await ort.InferenceSession.create('./best.onnx', { executionProviders: ['wasm'] });
+        
+        // SPEED HACK 1: Unlock Multi-threading
+        // This forces the browser to use multiple CPU cores instead of choking on just one.
+        const numCores = navigator.hardwareConcurrency || 4;
+        ort.env.wasm.numThreads = Math.min(4, numCores); 
+        
+        // SPEED HACK 2: Hardware Acceleration
+        // We tell it to try 'webgl' (GPU) first. If the laptop GPU rejects it, it gracefully falls back to multi-threaded 'wasm'.
+        session = await ort.InferenceSession.create('./best.onnx', { 
+            executionProviders: ['webgl', 'wasm'],
+            graphOptimizationLevel: 'all'
+        });
+        
         statusPanel.innerText = "STANDBY: AWAITING CAMERA INITIALIZATION";
         startCamera();
     } catch (e) {
