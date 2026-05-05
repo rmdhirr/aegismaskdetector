@@ -7,7 +7,7 @@ const statusPanel = document.getElementById('status-panel');
 
 let session;
 const TARGET_SIZE = 640;
-const CONFIDENCE_THRESHOLD = 0.45;
+const CONFIDENCE_THRESHOLD = 0.25; // Lowered to ensure detections aren't being hidden!
 const IOU_THRESHOLD = 0.4;
 
 /**
@@ -42,13 +42,16 @@ async function startCamera() {
         
         video.srcObject = stream;
         
-        // Wait for the video to successfully start playing
-        await video.play();
-
-        // Since the video is actively playing, the metadata is definitely loaded.
-        // Let's kickstart the AI engine immediately!
-        statusPanel.innerText = "AWAITING SUBJECT...";
-        requestAnimationFrame(processFrame);
+        // CORRECT ORDER: Listen for metadata FIRST, then play, then start the AI loop!
+        video.onloadedmetadata = async () => {
+            try {
+                await video.play();
+                statusPanel.innerText = "AWAITING SUBJECT...";
+                requestAnimationFrame(processFrame);
+            } catch (playError) {
+                console.error("Playback failed:", playError);
+            }
+        };
         
     } catch (e) {
         console.error("Camera Access Failure:", e);
